@@ -333,6 +333,9 @@ const SANDBOX_SETTING_CAPABILITIES = {
   vercel: DEFAULT_SANDBOX_SETTING_CAPABILITIES,
   opencomputer: { resources: false, resourceLimits: false, timeout: true },
   e2b: { resources: false, resourceLimits: false, timeout: true },
+  // Container instances are created per sandbox with the deployment's fixed
+  // instance type; per-session CPU/memory is not configurable.
+  cloudflare: { resources: false, resourceLimits: false, timeout: true },
 } satisfies Record<
   SandboxProviderName,
   { resources: boolean; resourceLimits: boolean; timeout: boolean }
