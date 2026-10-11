@@ -201,6 +201,13 @@ export function createSandboxProviderFromEnv(
       });
     case "e2b":
       return createE2BProviderFromEnv(env);
+    case "cloudflare":
+      // TODO(PR #17 merge): port CloudflareSandboxManager onto SandboxProvider.
+      // Requires the @cloudflare/sandbox dependency and a Sandbox DO binding
+      // in WorkerBindings; tracked in hermes-jobs STEP1-REPORT.md.
+      throw new Error(
+        "SANDBOX_PROVIDER=cloudflare is not wired into the provider factory yet (PR #17, step 1 of the port)"
+      );
     case "modal":
     case "modal-vm":
       return createModalProviderFromEnv(env, backend);

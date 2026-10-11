@@ -73,6 +73,8 @@ export default tseslint.config(
       "packages/modal-infra/**/*.js",
       // Sandbox runtime JS/TS files run inside sandboxes (Node.js), not part of the TS project
       "packages/sandbox-runtime/**",
+      // Cloudflare sandbox supervisor package (PR #17): plain JS plugin, built separately
+      "packages/sandbox/**/*.js",
     ],
   },
 
