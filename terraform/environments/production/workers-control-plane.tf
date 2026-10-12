@@ -223,9 +223,14 @@ module "control_plane_worker" {
     } : {}
   )
 
-  durable_objects = {
-    SESSION = { class_name = "SessionDO" }
-  }
+  durable_objects = merge(
+    {
+      SESSION = { class_name = "SessionDO" }
+    },
+    local.use_cloudflare_backend ? {
+      Sandbox = { class_name = "Sandbox" }
+    } : {}
+  )
 
   enable_durable_object_bindings = var.enable_durable_object_bindings
 

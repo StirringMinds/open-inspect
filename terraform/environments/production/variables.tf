@@ -709,13 +709,13 @@ variable "nextauth_secret" {
 # =============================================================================
 
 variable "sandbox_provider" {
-  description = "Sandbox backend for session execution: 'modal', 'modal-vm', 'daytona', 'vercel', 'opencomputer', or 'e2b'"
+  description = "Sandbox backend for session execution: 'modal', 'modal-vm', 'daytona', 'vercel', 'opencomputer', 'e2b', or 'cloudflare'"
   type        = string
   default     = "modal"
 
   validation {
-    condition     = contains(["modal", "modal-vm", "daytona", "vercel", "opencomputer", "e2b"], var.sandbox_provider)
-    error_message = "sandbox_provider must be 'modal', 'modal-vm', 'daytona', 'vercel', 'opencomputer', or 'e2b'."
+    condition     = contains(["modal", "modal-vm", "daytona", "vercel", "opencomputer", "e2b", "cloudflare"], var.sandbox_provider)
+    error_message = "sandbox_provider must be 'modal', 'modal-vm', 'daytona', 'vercel', 'opencomputer', 'e2b', or 'cloudflare'."
   }
 }
 
@@ -734,6 +734,12 @@ variable "teams_enforcement" {
     condition     = contains(["off", "shadow", "on"], var.teams_enforcement)
     error_message = "teams_enforcement must be 'off', 'shadow', or 'on'."
   }
+}
+
+variable "sandbox_sleep_after" {
+  description = "Optional Cloudflare container sleep-after duration (e.g. '1h') when SANDBOX_PROVIDER=cloudflare"
+  type        = string
+  default     = "1h"
 }
 
 variable "sandbox_boot_timeout_ms" {
