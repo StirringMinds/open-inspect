@@ -53,7 +53,8 @@
     "ALLOWED_EMAILS": "",
     "ALLOWED_GITHUB_ORGS": "",
     "UNSAFE_ALLOW_ALL_USERS": "true",
-    "SCM_PROVIDER": "github"
+    "SCM_PROVIDER": "github",
+    "LOG_LEVEL": "debug"
   },
 
   "observability": { "enabled": true }
