@@ -1,0 +1,60 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "oi-test-control-plane",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-10-01",
+  "compatibility_flags": ["nodejs_compat"],
+
+  "durable_objects": {
+    "bindings": [
+      { "name": "SESSION", "class_name": "SessionDO" },
+      { "name": "Sandbox", "class_name": "Sandbox" }
+    ]
+  },
+
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["SessionDO"] },
+    { "tag": "v2", "new_sqlite_classes": ["Sandbox"] }
+  ],
+
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "oi-test-db",
+      "database_id": "b59795e5-a911-4bc4-9a03-7fe5fe8a0808"
+    }
+  ],
+
+  "kv_namespaces": [
+    { "binding": "REPOS_CACHE", "id": "47349f835e514ddb9b880b230de16d0b" }
+  ],
+
+  "r2_buckets": [
+    { "binding": "MEDIA_BUCKET", "bucket_name": "oi-test-media" }
+  ],
+
+  "containers": [
+    {
+      "class_name": "Sandbox",
+      "image": "registry.cloudflare.com/aec793e8d592f57a099b55b31e518f0c/oi-test-sandbox@sha256:7b2684c876815bd5445d3cac1834f951bd00cb77d3c44a621ad97f57573631e1",
+      "max_instances": 2,
+      "instance_type": "standard-2"
+    }
+  ],
+
+  "vars": {
+    "SANDBOX_PROVIDER": "cloudflare",
+    "SANDBOX_SLEEP_AFTER": "1h",
+    "DEPLOYMENT_NAME": "oi-test",
+    "APP_NAME": "Open-Inspect Test",
+    "GITHUB_BOT_USERNAME": "open-inspect[bot]",
+    "ALLOWED_USERS": "",
+    "ALLOWED_EMAIL_DOMAINS": "",
+    "ALLOWED_EMAILS": "",
+    "ALLOWED_GITHUB_ORGS": "",
+    "UNSAFE_ALLOW_ALL_USERS": "true",
+    "SCM_PROVIDER": "github"
+  },
+
+  "observability": { "enabled": true }
+}
