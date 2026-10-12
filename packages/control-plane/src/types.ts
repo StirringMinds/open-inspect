@@ -4,10 +4,11 @@
 
 import type { CacheStore } from "@open-inspect/shared/cache-store";
 import type { SqlDatabase } from "./db/sql-database";
-import type { Jobs } from "./jobs";
+import { type Jobs } from "./jobs";
 import type { FetchClient, QueueMetricsSource } from "./platform-ports";
 import type { SessionRuntimeDispatch } from "./session/runtime-client";
 import type { ObjectStorage } from "./storage/object-storage";
+import type { CloudflareSandboxNamespace } from "./cloudflare/sandbox-namespace";
 
 /**
  * The deployment's configuration: variables and secrets, every one a string,
@@ -62,7 +63,8 @@ export interface EnvConfig {
   ALLOWED_GITHUB_ORGS?: string;
   UNSAFE_ALLOW_ALL_USERS?: string;
   CF_ACCOUNT_ID?: string; // Cloudflare account ID
-  SANDBOX_PROVIDER?: string; // "modal" (default), "daytona", "vercel", "opencomputer", or "e2b"
+  SANDBOX_PROVIDER?: string; // "modal" (default), "daytona", "vercel", "opencomputer", "e2b", or "cloudflare"
+  SANDBOX_SLEEP_AFTER?: string; // Optional Cloudflare container sleep-after duration (e.g. "1h")
   MODAL_WORKSPACE?: string; // Modal workspace name
   MODAL_ENVIRONMENT?: string; // Modal environment name for dashboard URLs
   MODAL_ENVIRONMENT_WEB_SUFFIX?: string; // Modal environment web suffix for endpoint URLs
@@ -115,6 +117,8 @@ export interface Platform {
   DB: SqlDatabase;
   /** Delivery to session runtimes, addressed by session id. */
   SESSION: SessionRuntimeDispatch;
+  /** Optional Cloudflare container sandbox binding. */
+  Sandbox?: CloudflareSandboxNamespace;
   /** Short-lived cache for the /repos listing. */
   REPOS_CACHE: CacheStore;
   /** Media artifacts: screenshots, uploads, session media. */

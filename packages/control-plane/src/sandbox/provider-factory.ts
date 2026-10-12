@@ -11,6 +11,10 @@ import {
   DEFAULT_E2B_SANDBOX_TIMEOUT_SECONDS,
   type E2BSandboxProvider,
 } from "./providers/e2b-provider";
+import {
+  createCloudflareProvider,
+  type CloudflareSandboxProvider,
+} from "./providers/cloudflare-provider";
 import { createModalProvider, type ModalSandboxProvider } from "./providers/modal-provider";
 import {
   createOpenComputerProvider,
@@ -168,6 +172,12 @@ function createE2BProviderFromEnv(env: Env): E2BSandboxProvider {
   });
 }
 
+function createCloudflareProviderFromEnv(env: Env): CloudflareSandboxProvider {
+  return createCloudflareProvider(env, {
+    scmProvider: resolveScmProviderFromEnv(env.SCM_PROVIDER),
+  });
+}
+
 export function createSandboxProviderFromEnv(env: Env, backend: "daytona"): DaytonaSandboxProvider;
 export function createSandboxProviderFromEnv(env: Env, backend: "e2b"): E2BSandboxProvider;
 export function createSandboxProviderFromEnv(
@@ -180,6 +190,10 @@ export function createSandboxProviderFromEnv(
   backend: "opencomputer",
   options?: { requireOpenComputerTemplate?: boolean }
 ): OpenComputerSandboxProvider;
+export function createSandboxProviderFromEnv(
+  env: Env,
+  backend: "cloudflare"
+): CloudflareSandboxProvider;
 export function createSandboxProviderFromEnv(
   env: Env,
   backend?: SandboxBackendName,
@@ -202,12 +216,7 @@ export function createSandboxProviderFromEnv(
     case "e2b":
       return createE2BProviderFromEnv(env);
     case "cloudflare":
-      // TODO(PR #17 merge): port CloudflareSandboxManager onto SandboxProvider.
-      // Requires the @cloudflare/sandbox dependency and a Sandbox DO binding
-      // in WorkerBindings; tracked in hermes-jobs STEP1-REPORT.md.
-      throw new Error(
-        "SANDBOX_PROVIDER=cloudflare is not wired into the provider factory yet (PR #17, step 1 of the port)"
-      );
+      return createCloudflareProviderFromEnv(env);
     case "modal":
     case "modal-vm":
       return createModalProviderFromEnv(env, backend);

@@ -94,6 +94,7 @@ const ENV_CONFIG_KEYS = {
   SECRETS_CAP_ENFORCEMENT: true,
   TEAMS_ENFORCEMENT: true,
   LOG_LEVEL: true,
+  SANDBOX_SLEEP_AFTER: true,
 } as const satisfies Record<keyof EnvConfig, true>;
 
 /** The `EnvConfig` field names, for checking documentation against the type. */
