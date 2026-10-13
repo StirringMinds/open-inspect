@@ -64,7 +64,6 @@ export const MODEL_CATALOG = [
         id: "anthropic/claude-sonnet-4-6",
         name: "Claude Sonnet 4.6",
         description: "Balanced, fast coding",
-        default: true,
         reasoning: { efforts: ["low", "medium", "high", "max"], default: "high" },
       },
       {
@@ -352,6 +351,18 @@ export const MODEL_CATALOG = [
     models: [
       { id: "deepseek/deepseek-v4-flash", name: "DeepSeek V4 Flash", description: "Fast model" },
       { id: "deepseek/deepseek-v4-pro", name: "DeepSeek V4 Pro", description: "Most capable" },
+    ],
+  },
+  {
+    category: "Cloudflare Workers AI",
+    enabledByDefault: true,
+    models: [
+      {
+        id: "cloudflare-workers-ai/@cf/moonshotai/kimi-k2.7-code",
+        name: "Kimi K2.7 Code (Workers AI)",
+        description: "Moonshot AI via Cloudflare Workers AI",
+        default: true,
+      },
     ],
   },
 ] as const satisfies readonly ModelCatalogGroup[];

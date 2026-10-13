@@ -85,17 +85,27 @@ export class CloudflareSandboxProvider implements SandboxProvider {
       const identity = scmCloneIdentity(this.providerConfig.scmProvider);
       const envVars = buildSandboxEnvVars(config, { scmIdentity: identity });
 
-      // Container startup receives the supervisor entrypoint. The supervisor
-      // clones the repo, starts OpenCode, and starts the bridge.
-      container.start({
-        entrypoint: ["node", "/app/supervisor.js"],
+      // Pass the Cloudflare account id and the control plane's Cloudflare token
+      // into the sandbox so the OpenCode harness can use Cloudflare Workers AI.
+      if (this.env.CF_ACCOUNT_ID) {
+        envVars.CLOUDFLARE_ACCOUNT_ID = this.env.CF_ACCOUNT_ID;
+      }
+      if (this.env.CLOUDFLARE_API_KEY) {
+        envVars.CLOUDFLARE_API_KEY = this.env.CLOUDFLARE_API_KEY;
+      }
+      // Workers AI models need a Cloudflare account id scoped to the request.
+      if (this.env.CLOUDFLARE_ACCOUNT_ID) {
+        envVars.CLOUDFLARE_ACCOUNT_ID = this.env.CLOUDFLARE_ACCOUNT_ID;
+      }
+
+      // Container startup receives the sandbox-runtime entrypoint. The runtime
+      // boots the repo/harness and opens the bridge back to the control plane.
+      // Cloudflare container labels reject keys or values longer than Docker's
+      // legacy limit; omit them until we know the exact constraint.
+      await container.start({
+        entrypoint: ["/opt/openinspect/python/bin/python", "-m", "sandbox_runtime.entrypoint"],
         enableInternet: true,
         env: envVars,
-        labels: {
-          openinspect_framework: "open-inspect",
-          openinspect_session_id: config.sessionId,
-          openinspect_sandbox_id: config.sandboxId,
-        },
       });
 
       // Give the container a bounded idle timeout matching the requested session
@@ -117,7 +127,23 @@ export class CloudflareSandboxProvider implements SandboxProvider {
         lifetime: this.lifetimeFromTimeout(timeoutSeconds),
       };
     } catch (error) {
+      this.logSpawnError(error);
       throw this.classifyError("Failed to create Cloudflare sandbox", error);
+    }
+  }
+
+  private logSpawnError(error: unknown): void {
+    if (error instanceof Error) {
+      log.warn("cloudflare.create_sandbox_failed", {
+        error: error.message,
+        stack: error.stack,
+        cause:
+          error.cause instanceof Error
+            ? error.cause.message
+            : String((error as Error & { cause?: unknown }).cause),
+      });
+    } else {
+      log.warn("cloudflare.create_sandbox_failed", { error: String(error) });
     }
   }
 

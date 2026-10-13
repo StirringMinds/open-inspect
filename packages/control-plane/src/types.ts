@@ -40,6 +40,7 @@ export interface EnvConfig {
   SERVICE_AUTH_SECRET_GITHUB_BOT?: string;
   SERVICE_AUTH_SECRET_LINEAR_BOT?: string;
   SLACK_BOT_TOKEN?: string; // Slack bot token for agent-initiated chat.postMessage calls
+  CLOUDFLARE_API_KEY?: string; // Cloudflare API token for Workers AI / AI Gateway inside the sandbox
 
   // GitHub App secrets (for git operations)
   GITHUB_APP_ID?: string;
@@ -63,6 +64,7 @@ export interface EnvConfig {
   ALLOWED_GITHUB_ORGS?: string;
   UNSAFE_ALLOW_ALL_USERS?: string;
   CF_ACCOUNT_ID?: string; // Cloudflare account ID
+  CLOUDFLARE_ACCOUNT_ID?: string; // Cloudflare account ID alias for Workers AI / container bindings
   SANDBOX_PROVIDER?: string; // "modal" (default), "daytona", "vercel", "opencomputer", "e2b", or "cloudflare"
   SANDBOX_SLEEP_AFTER?: string; // Optional Cloudflare container sleep-after duration (e.g. "1h")
   MODAL_WORKSPACE?: string; // Modal workspace name

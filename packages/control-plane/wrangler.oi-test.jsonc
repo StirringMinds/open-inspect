@@ -36,7 +36,7 @@
   "containers": [
     {
       "class_name": "Sandbox",
-      "image": "registry.cloudflare.com/aec793e8d592f57a099b55b31e518f0c/oi-test-sandbox@sha256:7b2684c876815bd5445d3cac1834f951bd00cb77d3c44a621ad97f57573631e1",
+      "image": "registry.cloudflare.com/aec793e8d592f57a099b55b31e518f0c/oi-test-sandbox@sha256:6217d2aba15bbc69ba68cc029b0422655c717636ae50e4b1d8103ba8023284d7",
       "max_instances": 2,
       "instance_type": "standard-2"
     }
@@ -51,10 +51,15 @@
     "ALLOWED_USERS": "",
     "ALLOWED_EMAIL_DOMAINS": "",
     "ALLOWED_EMAILS": "",
-    "ALLOWED_GITHUB_ORGS": "",
-    "UNSAFE_ALLOW_ALL_USERS": "true",
+    "ALLOWED_GITHUB_ORGS": "StirringMinds",
+    "UNSAFE_ALLOW_ALL_USERS": "false",
     "SCM_PROVIDER": "github",
-    "LOG_LEVEL": "debug"
+    "LOG_LEVEL": "debug",
+    "WORKER_URL": "https://oi-test-control-plane.jayasuriya-brunthan.workers.dev",
+    "WEB_APP_URL": "https://oi-test-web.jayasuriya-brunthan.workers.dev",
+    "GITHUB_CLIENT_ID": "Iv23liI4kMHiELf1TmMN",
+    "CF_ACCOUNT_ID": "aec793e8d592f57a099b55b31e518f0c",
+    "CLOUDFLARE_ACCOUNT_ID": "aec793e8d592f57a099b55b31e518f0c"
   },
 
   "observability": { "enabled": true }
