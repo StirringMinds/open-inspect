@@ -1,0 +1,36 @@
+// Test deployment of the Slack bot on the 350k account (oi-test).
+// Secrets (set with `wrangler secret put -c wrangler.oi-test.jsonc`):
+//   SLACK_BOT_TOKEN, SLACK_SIGNING_SECRET, SERVICE_AUTH_SECRET (= control plane SERVICE_AUTH_SECRET_SLACK_BOT)
+//   optional classifier key: ANTHROPIC_API_KEY or OPENAI_API_KEY (matching CLASSIFICATION_MODEL)
+{
+  "name": "oi-test-slack-bot",
+  "main": "src/index.ts",
+  "compatibility_date": "2024-09-23",
+  "compatibility_flags": ["nodejs_compat"],
+  "kv_namespaces": [{ "binding": "SLACK_KV", "id": "5a66c839c7d34595824edd44aecc715a" }],
+  "services": [{ "binding": "CONTROL_PLANE", "service": "oi-test-control-plane" }],
+  "queues": {
+    "producers": [{ "binding": "SLACK_COMPLETION_QUEUE", "queue": "oi-test-slack-completion" }],
+    "consumers": [
+      {
+        "queue": "oi-test-slack-completion",
+        "max_batch_size": 1,
+        "max_batch_timeout": 1,
+        "max_concurrency": 5,
+        "max_retries": 1,
+        "retry_delay": 15,
+        "dead_letter_queue": "oi-test-slack-completion-dlq"
+      }
+    ]
+  },
+  "vars": {
+    "DEPLOYMENT_NAME": "oi-test",
+    "APP_NAME": "Open-Inspect Test",
+    "CONTROL_PLANE_URL": "https://oi-test-control-plane.jayasuriya-brunthan.workers.dev",
+    "WEB_APP_URL": "https://oi-test-web.jayasuriya-brunthan.workers.dev",
+    "DEFAULT_MODEL": "cloudflare-workers-ai/@cf/moonshotai/kimi-k2.7-code",
+    "CLASSIFICATION_MODEL": "anthropic/claude-haiku-4-5",
+    "LOG_LEVEL": "debug"
+  },
+  "observability": { "enabled": true }
+}
