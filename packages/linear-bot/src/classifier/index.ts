@@ -266,6 +266,9 @@ export async function classifyRepo(
   try {
     const modelId = env.CLASSIFICATION_MODEL || DEFAULT_CLASSIFICATION_MODEL;
     const { provider, model } = resolveClassificationProvider(modelId);
+    if (provider === "workers-ai") {
+      throw new Error(`Workers AI classification is not supported by the Linear bot: ${modelId}`);
+    }
 
     const result: ClassifyToolInput =
       provider === "anthropic"

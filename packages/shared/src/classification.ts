@@ -10,7 +10,7 @@
 import { z } from "zod";
 
 /** Provider serving a classification request. */
-export type ClassificationProvider = "anthropic" | "openai";
+export type ClassificationProvider = "anthropic" | "openai" | "workers-ai";
 
 /**
  * Model the classifiers use when a deployment sets no override.
@@ -33,6 +33,12 @@ export const CLASSIFICATION_REQUEST_TIMEOUT_MS = 10_000;
 export const OPENAI_CLASSIFICATION_MAX_COMPLETION_TOKENS = 2000;
 
 /**
+ * Workers AI open-weight models (e.g. Kimi K2.7 Code) emit reasoning before the
+ * answer and run slower than hosted Haiku, so they get a longer bound.
+ */
+export const WORKERS_AI_CLASSIFICATION_REQUEST_TIMEOUT_MS = 30_000;
+
+/**
  * Resolve which provider serves a classification model id, and the bare id to
  * send that provider (any `anthropic/`/`openai/` prefix stripped).
  *
@@ -53,6 +59,15 @@ export function resolveClassificationProvider(modelId: string): {
   }
   if (modelId.startsWith("openai/")) {
     return { provider: "openai", model: modelId.slice("openai/".length) };
+  }
+  // Cloudflare Workers AI, served through the Worker's `AI` binding.
+  for (const prefix of ["cloudflare-workers-ai/", "workers-ai/"]) {
+    if (modelId.startsWith(prefix)) {
+      return { provider: "workers-ai", model: modelId.slice(prefix.length) };
+    }
+  }
+  if (modelId.startsWith("@cf/")) {
+    return { provider: "workers-ai", model: modelId };
   }
   if (modelId.startsWith("claude-")) {
     return { provider: "anthropic", model: modelId };

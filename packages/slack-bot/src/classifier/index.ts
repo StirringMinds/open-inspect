@@ -16,6 +16,7 @@ import { matchTargetId, resolveChannelTargets, resolveRoutingRuleTargets } from 
 import { escapeMrkdwnText } from "@open-inspect/shared/slack";
 import {
   CLASSIFICATION_REQUEST_TIMEOUT_MS,
+  WORKERS_AI_CLASSIFICATION_REQUEST_TIMEOUT_MS,
   DEFAULT_CLASSIFICATION_MODEL,
   callOpenAIStructured,
   requireClassificationProviderKey,
@@ -33,6 +34,8 @@ import { createLogger } from "../logger";
 const log = createLogger("classifier");
 const CLASSIFY_TARGET_TOOL_NAME = "classify_target";
 const CLASSIFY_TARGET_SYSTEM_PROMPT = `Answer by calling the ${CLASSIFY_TARGET_TOOL_NAME} tool exactly once. Do not reply in plain text.`;
+const CLASSIFY_TARGET_SYSTEM_PROMPT_JSON =
+  "Reply with only a JSON object with keys targetId, confidence, reasoning, alternatives. No prose.";
 const CONFIDENCE_LEVELS = [
   "high",
   "medium",
@@ -395,22 +398,28 @@ export class RepoClassifier {
       const { provider, model } = resolveClassificationProvider(modelId);
 
       const llmResult =
-        provider === "anthropic"
-          ? await this.callAnthropic(
-              requireClassificationProviderKey(
-                this.env.ANTHROPIC_API_KEY,
-                "ANTHROPIC_API_KEY",
-                modelId
-              ),
-              model,
-              prompt
-            )
-          : await callOpenAI(
-              requireClassificationProviderKey(this.env.OPENAI_API_KEY, "OPENAI_API_KEY", modelId),
-              model,
-              prompt,
-              this.env.CLASSIFICATION_REASONING_EFFORT
-            );
+        provider === "workers-ai"
+          ? await callWorkersAI(this.env.AI, modelId, model, prompt)
+          : provider === "anthropic"
+            ? await this.callAnthropic(
+                requireClassificationProviderKey(
+                  this.env.ANTHROPIC_API_KEY,
+                  "ANTHROPIC_API_KEY",
+                  modelId
+                ),
+                model,
+                prompt
+              )
+            : await callOpenAI(
+                requireClassificationProviderKey(
+                  this.env.OPENAI_API_KEY,
+                  "OPENAI_API_KEY",
+                  modelId
+                ),
+                model,
+                prompt,
+                this.env.CLASSIFICATION_REASONING_EFFORT
+              );
 
       const matchedTarget = llmResult.targetId ? matchTargetId(llmResult.targetId, catalog) : null;
 
@@ -469,4 +478,82 @@ export class RepoClassifier {
  */
 export function createClassifier(env: Env): RepoClassifier {
   return new RepoClassifier(env);
+}
+
+/**
+ * Extract the JSON object from a model's text reply, tolerating code fences or
+ * stray prose around it.
+ */
+export function parseJsonObjectFromText(text: string): unknown {
+  const trimmed = text.trim();
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    const start = trimmed.indexOf("{");
+    const end = trimmed.lastIndexOf("}");
+    if (start === -1 || end <= start) {
+      throw new Error("No JSON object in Workers AI response");
+    }
+    return JSON.parse(trimmed.slice(start, end + 1));
+  }
+}
+
+/** Pull the assistant text out of either Workers AI response shape. */
+function workersAiResponseText(result: unknown): string {
+  if (typeof result === "string") return result;
+  const r = result as {
+    response?: unknown;
+    choices?: Array<{ message?: { content?: string | null } }>;
+  } | null;
+  const content = r?.choices?.[0]?.message?.content;
+  if (typeof content === "string" && content.trim()) return content;
+  if (typeof r?.response === "string") return r.response;
+  // Some models return `response` already parsed when JSON mode is on.
+  if (r?.response && typeof r.response === "object") return JSON.stringify(r.response);
+  throw new Error("Empty Workers AI response content");
+}
+
+/**
+ * Classify via Cloudflare Workers AI through the Worker's `AI` binding, using
+ * JSON-schema structured output driven by the same tool schema, then funnel
+ * through {@link normalizeModelResponse}.
+ */
+export async function callWorkersAI(
+  ai: Ai | undefined,
+  modelId: string,
+  model: string,
+  prompt: string
+): Promise<LLMResponse> {
+  if (!ai) {
+    throw new Error(`Classification model "${modelId}" requires the AI binding to be configured`);
+  }
+  const run = ai.run as unknown as (
+    model: string,
+    inputs: Record<string, unknown>,
+    options?: Record<string, unknown>
+  ) => Promise<unknown>;
+  const result = await Promise.race([
+    run.call(ai, model, {
+      messages: [
+        { role: "system", content: `${CLASSIFY_TARGET_SYSTEM_PROMPT_JSON}` },
+        { role: "user", content: prompt },
+      ],
+      max_tokens: 2000,
+      response_format: {
+        type: "json_schema",
+        json_schema: {
+          name: CLASSIFY_TARGET_TOOL_NAME,
+          strict: true,
+          schema: CLASSIFY_TARGET_TOOL.input_schema,
+        },
+      },
+    }),
+    new Promise<never>((_, reject) =>
+      setTimeout(
+        () => reject(new Error("Workers AI classification timed out")),
+        WORKERS_AI_CLASSIFICATION_REQUEST_TIMEOUT_MS
+      )
+    ),
+  ]);
+  return normalizeModelResponse(parseJsonObjectFromText(workersAiResponseText(result)));
 }

@@ -46,6 +46,8 @@ export interface Env {
    */
   ANTHROPIC_API_KEY?: string;
   OPENAI_API_KEY?: string;
+  /** Workers AI binding, used when CLASSIFICATION_MODEL is a Workers AI model. */
+  AI?: Ai;
   CONTROL_PLANE_API_KEY?: string;
   SERVICE_AUTH_SECRET?: string; // Per-service sig1 signing secret; also verifies CP callbacks
   LOG_LEVEL?: string;

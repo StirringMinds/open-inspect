@@ -154,3 +154,20 @@ describe("callOpenAIStructured", () => {
     );
   });
 });
+
+describe("resolveClassificationProvider workers-ai", () => {
+  it("routes Workers AI model ids to the workers-ai provider", () => {
+    expect(
+      resolveClassificationProvider("cloudflare-workers-ai/@cf/moonshotai/kimi-k2.7-code")
+    ).toEqual({
+      provider: "workers-ai",
+      model: "@cf/moonshotai/kimi-k2.7-code",
+    });
+    expect(resolveClassificationProvider("workers-ai/@cf/zai-org/glm-5.3-flash").model).toBe(
+      "@cf/zai-org/glm-5.3-flash"
+    );
+    expect(resolveClassificationProvider("@cf/moonshotai/kimi-k2.7-code").provider).toBe(
+      "workers-ai"
+    );
+  });
+});
