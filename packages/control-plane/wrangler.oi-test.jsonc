@@ -37,7 +37,7 @@
     {
       "class_name": "Sandbox",
       "image": "registry.cloudflare.com/aec793e8d592f57a099b55b31e518f0c/oi-test-sandbox@sha256:6217d2aba15bbc69ba68cc029b0422655c717636ae50e4b1d8103ba8023284d7",
-      "max_instances": 2,
+      "max_instances": 24,
       "instance_type": "standard-2"
     }
   ],
@@ -45,6 +45,7 @@
   "vars": {
     "SANDBOX_PROVIDER": "cloudflare",
     "SANDBOX_SLEEP_AFTER": "1h",
+    "SANDBOX_INACTIVITY_TIMEOUT_MS": "90000",
     "DEPLOYMENT_NAME": "oi-test",
     "APP_NAME": "Open-Inspect Test",
     "GITHUB_BOT_USERNAME": "open-inspect[bot]",
