@@ -17,6 +17,7 @@ import { authenticateServiceRequest } from "./service/request-authenticator";
 import { createLogger } from "../logger";
 import type { AuthenticationRequestServices } from "./request-services";
 import type { Env } from "../types";
+import { authenticateAdminApiKey } from "./admin-api-key";
 
 const logger = createLogger("auth");
 
@@ -89,6 +90,9 @@ export async function authenticate(
       };
     }
   }
+
+  const admin = await authenticateAdminApiKey(request, env);
+  if (admin) return admin;
 
   return { reason: "Unauthorized", status: 401, failedScheme: "none" };
 }

@@ -33,6 +33,9 @@ export interface EnvConfig {
   VERCEL_TOKEN?: string; // Vercel API access token for Sandbox API
   // Pepper for image-build callback token hashes.
   IMAGE_CALLBACK_TOKEN_PEPPER?: string;
+  // Operator admin API key (Bearer). Authenticates as ADMIN_API_KEY_USER_ID.
+  ADMIN_API_KEY?: string;
+  ADMIN_API_KEY_USER_ID?: string;
   // Per-service sig1 verification keys. Absent ⇒ that service cannot
   // authenticate.
   SERVICE_AUTH_SECRET_WEB?: string;
