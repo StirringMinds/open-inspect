@@ -629,6 +629,36 @@ export class SandboxShutdownCoordinator {
     );
   }
 
+  /** A failed/unknown record still holding a source an ephemeral provider can only stop. */
+  private isStrandedEphemeralSource(state: ShutdownRecord): boolean {
+    return (
+      (state.phase === "failed" || state.phase === "unknown") &&
+      this.current(state) &&
+      this.isEphemeralProvider() &&
+      !!state.providerObjectId &&
+      state.sourceRetired !== true &&
+      !state.discarding &&
+      !state.restoreInvoked &&
+      this.canDiscard(state)
+    );
+  }
+
+  /** Whether an alarm should run now to release a stranded ephemeral source (see handleAlarm). */
+  needsEphemeralRelease(): boolean {
+    const state = this.deps.store.read();
+    return !!state && this.isStrandedEphemeralSource(state);
+  }
+
+  /** No snapshots and no persistent resume, but an explicit stop: nothing to save, only to stop. */
+  private isEphemeralProvider(): boolean {
+    const { capabilities } = this.deps.provider;
+    return (
+      capabilities.supportsSnapshots !== true &&
+      capabilities.supportsPersistentResume !== true &&
+      this.canStopSource()
+    );
+  }
+
   private canStopSource(): boolean {
     return (
       this.deps.provider.capabilities.supportsExplicitStop === true &&
@@ -1021,6 +1051,12 @@ export class SandboxShutdownCoordinator {
     if (state.phase === "saved")
       return this.continuationPaused(state) ? "hold_watchdogs" : "continue";
     if (state.phase === "failed" || state.phase === "unknown") {
+      // Self-heal records left by the old flow on an ephemeral provider: no save
+      // can ever be confirmed there, so the held source is stopped and released.
+      if (this.activeOperation === null && this.isStrandedEphemeralSource(state)) {
+        await this.discard(state);
+        return "continue";
+      }
       if (this.activeOperation === null && this.canAutomaticallyRetryCapture(state)) {
         if (allowCaptureRetry && this.now() >= state.captureByMs!)
           await this.retryCapture(state, "alarm");
@@ -1098,6 +1134,19 @@ export class SandboxShutdownCoordinator {
 
   private async capture(state: ShutdownRecord): Promise<void> {
     const { provider } = this.deps;
+    // An ephemeral provider (no snapshots, no persistent resume — Cloudflare
+    // Containers) has nothing that can be saved, so a capture can never be
+    // confirmed and the source was never stopped: finished sessions kept their
+    // container (and a max_instances slot) indefinitely. Stop it instead; the
+    // next prompt starts fresh, which is all this provider can do anyway.
+    if (state.providerObjectId && this.isEphemeralProvider() && this.canDiscard(state)) {
+      this.deps.log?.info("Ephemeral sandbox: stopping instead of saving", {
+        event: "sandbox.ephemeral_stop",
+        reason: state.reason,
+      });
+      await this.discard(state);
+      return;
+    }
     if (!state.providerObjectId || this.now() >= state.captureByMs!) {
       await this.scheduleCaptureRetry(
         this.fail(state, "failed", "No time or provider handle remained to save the sandbox.", true)

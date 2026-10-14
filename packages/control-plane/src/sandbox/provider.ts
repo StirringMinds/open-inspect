@@ -455,6 +455,34 @@ export type SandboxErrorType = "transient" | "permanent";
  * Includes error type classification for circuit breaker handling.
  * The circuit breaker only counts permanent errors toward its threshold.
  */
+/**
+ * The provider refused to start a sandbox because the account/app is at its
+ * concurrency cap (e.g. Cloudflare Containers max_instances). This is not a
+ * failure of the session: the start is queued and retried when capacity frees.
+ */
+export class SandboxCapacityError extends Error {
+  readonly errorType = "transient" as const;
+  constructor(
+    message: string,
+    public readonly cause?: Error
+  ) {
+    super(message);
+    this.name = "SandboxCapacityError";
+  }
+}
+
+/** Marker prefix on sandbox.last_spawn_error while a start waits for capacity. */
+export const SANDBOX_QUEUED_PREFIX = "[queued]";
+
+export function isSandboxCapacityQueued(lastSpawnError: string | null | undefined): boolean {
+  return typeof lastSpawnError === "string" && lastSpawnError.startsWith(SANDBOX_QUEUED_PREFIX);
+}
+
+/** Delay before the next capacity retry: 20 s base plus up to 20 s jitter to spread a burst. */
+export function capacityRetryDelayMs(random: () => number = Math.random): number {
+  return 20_000 + Math.floor(random() * 20_000);
+}
+
 export class SandboxProviderError extends Error {
   constructor(
     message: string,

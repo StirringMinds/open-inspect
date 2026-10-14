@@ -26,6 +26,10 @@ import {
 import {
   PrebuiltImageUnavailableError,
   SandboxProviderError,
+  SandboxCapacityError,
+  SANDBOX_QUEUED_PREFIX,
+  isSandboxCapacityQueued,
+  capacityRetryDelayMs,
   SandboxLaunchRejectedError,
   providerResumesAfterStop,
   type SandboxProvider,
@@ -123,6 +127,8 @@ export interface SandboxShutdownLifecycle extends VmStartupReconciliationShutdow
   recordProviderStartup(generation: SandboxGeneration, lifetime: SandboxLifetime): Promise<void>;
   /** Blocks generic destructive lifecycle work while shutdown or capture ownership is unresolved. */
   isHolding(): boolean;
+  /** A failed/unknown record holds a source an ephemeral provider can only stop. */
+  needsEphemeralRelease?(): boolean;
   /** Tells a runtime refused at reconnect to retry while a capture needs its sandbox. */
   onRefusedReconnect(): "retry" | "exit";
   /** Owns termination; only unmanaged permits the legacy lifecycle fallback. */
@@ -930,6 +936,10 @@ export class SandboxLifecycleManager
       }
       await this.handleRejectedStartupAllocation(error, generation);
       const errorMessage = error instanceof Error ? error.message : "Failed to spawn sandbox";
+      if (error instanceof SandboxCapacityError && generation) {
+        await this.queueForCapacity(generation, errorMessage);
+        return;
+      }
       this.log.error("Sandbox spawn completed", {
         event: "sandbox.spawn",
         outcome: "error",
@@ -1053,6 +1063,42 @@ export class SandboxLifecycleManager
       this.config.circuitBreaker,
       now
     ).shouldProceed;
+  }
+
+  /**
+   * The provider is at its concurrency cap. The attempt is not a failure of the
+   * session: the queued prompt stays pending, the circuit breaker is not touched,
+   * and an alarm re-drives the queue after a jittered delay until a slot frees.
+   */
+  private async queueForCapacity(generation: SandboxGeneration, detail: string): Promise<void> {
+    const bridgeAttached = this.wsManager.getSandboxWebSocket() !== null;
+    if (bridgeAttached || !this.storage.transitionSandboxStatus(generation, "spawning", "failed")) {
+      this.log.warn("Capacity refusal after the row moved on; leaving it", {
+        event: "sandbox.capacity_queue_superseded",
+        bridge_attached: bridgeAttached,
+      });
+      return;
+    }
+    const now = Date.now();
+    const retryInMs = capacityRetryDelayMs();
+    try {
+      this.storage.setLastSpawnError(`${SANDBOX_QUEUED_PREFIX} ${detail}`, now);
+    } catch (error) {
+      this.log.warn("Failed to persist capacity queue marker", {
+        event: "sandbox.capacity_queue_persist_failed",
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+    this.log.info("Sandbox start queued: provider at capacity", {
+      event: "sandbox.capacity_queued",
+      retry_in_ms: retryInMs,
+      sandbox_id: generation.sandboxId,
+    });
+    this.broadcaster.broadcast({
+      type: "sandbox_warning",
+      message: "All sandboxes are busy. This session is queued and will start automatically.",
+    });
+    await this.alarmScheduler.schedule(now + retryInMs);
   }
 
   /**
@@ -1606,6 +1652,20 @@ export class SandboxLifecycleManager
     }
 
     const now = Date.now();
+
+    if (sandbox.status === "failed" && isSandboxCapacityQueued(sandbox.last_spawn_error)) {
+      const dueAt = (sandbox.last_spawn_error_at ?? 0) + 20_000;
+      if (now < dueAt) {
+        await this.alarmScheduler.schedule(dueAt);
+        return "no_action";
+      }
+      this.log.info("Retrying a sandbox start that was waiting for capacity", {
+        event: "sandbox.capacity_retry",
+        queued_since: sandbox.last_spawn_error_at,
+      });
+      await this.config.resumeQueuedWork?.();
+      return "no_action";
+    }
     const alarmGeneration: SandboxGeneration = {
       sandboxId: sandbox.modal_sandbox_id,
       createdAt: sandbox.created_at,
@@ -2049,6 +2109,14 @@ export class SandboxLifecycleManager
         generation,
         error.providerObjectId
       );
+  }
+
+  /**
+   * Arm an immediate alarm when a stranded ephemeral source (left by the old
+   * save flow) is waiting to be stopped; the shutdown alarm then releases it.
+   */
+  async rearmEphemeralRelease(): Promise<void> {
+    if (this.shutdown.needsEphemeralRelease?.()) await this.alarmScheduler.schedule(Date.now());
   }
 
   rearmRejectedStartupCleanupAlarm(): Promise<void> {

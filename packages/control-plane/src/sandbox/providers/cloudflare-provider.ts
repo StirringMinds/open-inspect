@@ -18,6 +18,7 @@ import { buildSandboxEnvVars, scmCloneIdentity } from "../sandbox-env";
 import {
   DEFAULT_SANDBOX_TIMEOUT_SECONDS,
   SandboxProviderError,
+  SandboxCapacityError,
   type CreateSandboxConfig,
   type CreateSandboxResult,
   type SandboxLifetime,
@@ -30,6 +31,15 @@ import type { Env } from "../../types";
 import { createLogger } from "../../logger";
 
 const log = createLogger("cloudflare-provider");
+
+const CAPACITY_ERROR_PATTERN =
+  /maximum number of running container instances exceeded|no container instance that can be provided/i;
+
+/** Cloudflare's at-capacity answers (max_instances reached, or no instance free to place). */
+export function isCloudflareCapacityError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  return CAPACITY_ERROR_PATTERN.test(message);
+}
 
 export interface CloudflareProviderConfig {
   scmProvider: SourceControlProviderName;
@@ -114,6 +124,16 @@ export class CloudflareSandboxProvider implements SandboxProvider {
       try {
         await container.setInactivityTimeout(timeoutSeconds * 1000);
       } catch (error) {
+        // Cloudflare does not reject start() at capacity; the refusal surfaces on
+        // the next container call. Without this check the spawn "succeeded", the
+        // bridge never connected, and the session failed ~12 min later.
+        if (isCloudflareCapacityError(error)) {
+          await container.destroy().catch(() => undefined);
+          throw new SandboxCapacityError(
+            "All sandboxes are busy (container max_instances reached); queued until one frees up",
+            error instanceof Error ? error : undefined
+          );
+        }
         log.warn("cloudflare.set_inactivity_timeout_failed", {
           sandbox_id: config.sandboxId,
           error: error instanceof Error ? error.message : String(error),
@@ -175,8 +195,18 @@ export class CloudflareSandboxProvider implements SandboxProvider {
     };
   }
 
-  private classifyError(message: string, error: unknown): SandboxProviderError {
-    if (error instanceof SandboxProviderError) return error;
+  private classifyError(
+    message: string,
+    error: unknown
+  ): SandboxProviderError | SandboxCapacityError {
+    if (error instanceof SandboxProviderError || error instanceof SandboxCapacityError)
+      return error;
+    if (isCloudflareCapacityError(error)) {
+      return new SandboxCapacityError(
+        "All sandboxes are busy (container max_instances reached); queued until one frees up",
+        error instanceof Error ? error : undefined
+      );
+    }
     if (error instanceof Error && error.message.toLowerCase().includes("binding")) {
       return new SandboxProviderError(`${message}: ${error.message}`, "permanent", error);
     }

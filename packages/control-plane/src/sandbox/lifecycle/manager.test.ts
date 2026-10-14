@@ -5,6 +5,7 @@
  */
 
 import { afterEach, describe, it, expect, vi } from "vitest";
+import { SandboxCapacityError, isSandboxCapacityQueued } from "../provider";
 import { DEFAULT_LIFECYCLE_CONFIG, type SandboxShutdownLifecycle } from "./manager";
 import { TERMINAL_TOKEN_TTL_SECONDS } from "./sandbox-access";
 import { COMPATIBLE_RUNTIME_VERSION } from "../../image-builds/test-helpers";
@@ -681,5 +682,65 @@ describe("spawn admission race (#1589)", () => {
       expect.stringContaining("superseded"),
       expect.anything()
     );
+  });
+});
+
+describe("provider at capacity (Cloudflare max_instances)", () => {
+  function capacityHarness() {
+    const sandbox = createMockSandbox({ status: "failed" });
+    const storage = createMockStorage(createMockSession(), sandbox);
+    const broadcaster = createMockBroadcaster();
+    const alarms = createMockAlarmScheduler();
+    const resumeQueuedWork = vi.fn(async () => {});
+    const manager = createTestLifecycleManager(
+      createMockProvider({
+        createSandbox: async () => {
+          throw new SandboxCapacityError("All sandboxes are busy");
+        },
+      }),
+      storage,
+      storage,
+      broadcaster,
+      createMockWebSocketManager(false),
+      alarms,
+      createMockIdGenerator(),
+      createUnmanagedShutdown(),
+      { ...createTestConfig(), resumeQueuedWork }
+    );
+    return { sandbox, broadcaster, alarms, manager, resumeQueuedWork };
+  }
+
+  it("queues the start instead of failing the session", async () => {
+    const h = capacityHarness();
+    await h.manager.spawnSandbox();
+
+    expect(h.sandbox.status).toBe("failed");
+    expect(h.sandbox.spawn_failure_count ?? 0).toBe(0);
+    expect(isSandboxCapacityQueued(h.sandbox.last_spawn_error)).toBe(true);
+    expect(h.broadcaster.messages).toContainEqual(
+      expect.objectContaining({ type: "sandbox_warning" })
+    );
+    expect(h.broadcaster.messages).not.toContainEqual(
+      expect.objectContaining({ type: "sandbox_error" })
+    );
+    const retryAt = h.alarms.alarms.at(-1)!;
+    expect(retryAt - h.sandbox.last_spawn_error_at!).toBeGreaterThanOrEqual(20_000);
+    expect(retryAt - h.sandbox.last_spawn_error_at!).toBeLessThan(40_000);
+  });
+
+  it("re-drives the queued prompt from the alarm once the retry is due", async () => {
+    vi.useFakeTimers();
+    try {
+      const h = capacityHarness();
+      await h.manager.spawnSandbox();
+      await expect(h.manager.handleAlarm()).resolves.toBe("no_action");
+      expect(h.resumeQueuedWork).not.toHaveBeenCalled();
+
+      vi.advanceTimersByTime(21_000);
+      await h.manager.handleAlarm();
+      expect(h.resumeQueuedWork).toHaveBeenCalledOnce();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

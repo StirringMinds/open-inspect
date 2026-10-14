@@ -2063,3 +2063,59 @@ describe("SandboxShutdownCoordinator", () => {
     expect(f.shutdown.admissionDecision()).toBe("held");
   });
 });
+
+describe("ephemeral providers (Cloudflare Containers)", () => {
+  it("stops the container on an inactivity shutdown instead of waiting on a save that can never be confirmed", async () => {
+    const stopSandbox = vi.fn(async () => ({ success: true as const }));
+    const f = fixture(
+      provider({
+        name: "cloudflare",
+        capabilities: {
+          supportsSandboxTimeout: true,
+          supportsSnapshots: false,
+          supportsRestore: false,
+          supportsPersistentResume: false,
+          supportsExplicitStop: true,
+        },
+        stopSandbox,
+      })
+    );
+    await readyFinite(f);
+
+    await f.shutdown.requestShutdown("inactivity_timeout");
+    f.shutdown.prepared(preparedEvent(f.store.value!));
+    await f.shutdown.handleAlarm();
+
+    expect(stopSandbox).toHaveBeenCalledWith(expect.objectContaining({ intent: "destroy" }));
+    expect(f.deps.sandbox.discardSandboxState).toHaveBeenCalled();
+    expect(f.store.value?.phase).toBe("running");
+    expect(f.store.value?.providerObjectId).toBeNull();
+    expect(f.store.value?.sourceRetired).toBe(true);
+  });
+
+  it("self-heals an 'unknown' record left by the old save flow by stopping the source", async () => {
+    const stopSandbox = vi.fn(async () => ({ success: true as const }));
+    const ephemeral = {
+      supportsSandboxTimeout: true,
+      supportsSnapshots: false,
+      supportsRestore: false,
+      supportsPersistentResume: false,
+      supportsExplicitStop: true,
+    };
+    const f = fixture(provider({ name: "cloudflare", capabilities: ephemeral, stopSandbox }));
+    await readyFinite(f);
+    f.store.write({
+      ...f.store.value!,
+      phase: "unknown",
+      error: "The provider did not confirm the save.",
+    });
+
+    expect(f.shutdown.needsEphemeralRelease()).toBe(true);
+    await f.shutdown.handleAlarm();
+
+    expect(stopSandbox).toHaveBeenCalledWith(expect.objectContaining({ intent: "destroy" }));
+    expect(f.store.value?.phase).toBe("running");
+    expect(f.store.value?.sourceRetired).toBe(true);
+    expect(f.shutdown.needsEphemeralRelease()).toBe(false);
+  });
+});

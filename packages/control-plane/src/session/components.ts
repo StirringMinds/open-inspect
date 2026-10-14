@@ -1062,6 +1062,7 @@ export function createSessionRuntime(platform: SessionPlatform, env: Env): Sessi
             await wsManager.expireAuthorizationLeases(Date.now());
             await alarmScheduler.rehydrate();
             await lifecycleManager.rearmRejectedStartupCleanupAlarm();
+            await lifecycleManager.rearmEphemeralRelease();
             await terminalMessageProjection.rearm();
           },
           {
