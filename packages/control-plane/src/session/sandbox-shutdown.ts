@@ -629,6 +629,26 @@ export class SandboxShutdownCoordinator {
     );
   }
 
+  /** A failed/unknown record still holding a source an ephemeral provider can only stop. */
+  private isStrandedEphemeralSource(state: ShutdownRecord): boolean {
+    return (
+      (state.phase === "failed" || state.phase === "unknown") &&
+      this.current(state) &&
+      this.isEphemeralProvider() &&
+      !!state.providerObjectId &&
+      state.sourceRetired !== true &&
+      !state.discarding &&
+      !state.restoreInvoked &&
+      this.canDiscard(state)
+    );
+  }
+
+  /** Whether an alarm should run now to release a stranded ephemeral source (see handleAlarm). */
+  needsEphemeralRelease(): boolean {
+    const state = this.deps.store.read();
+    return !!state && this.isStrandedEphemeralSource(state);
+  }
+
   /** No snapshots and no persistent resume, but an explicit stop: nothing to save, only to stop. */
   private isEphemeralProvider(): boolean {
     const { capabilities } = this.deps.provider;
@@ -1033,15 +1053,7 @@ export class SandboxShutdownCoordinator {
     if (state.phase === "failed" || state.phase === "unknown") {
       // Self-heal records left by the old flow on an ephemeral provider: no save
       // can ever be confirmed there, so the held source is stopped and released.
-      if (
-        this.activeOperation === null &&
-        this.isEphemeralProvider() &&
-        !!state.providerObjectId &&
-        state.sourceRetired !== true &&
-        !state.discarding &&
-        !state.restoreInvoked &&
-        this.canDiscard(state)
-      ) {
+      if (this.activeOperation === null && this.isStrandedEphemeralSource(state)) {
         await this.discard(state);
         return "continue";
       }

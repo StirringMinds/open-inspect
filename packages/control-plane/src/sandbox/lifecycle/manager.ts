@@ -127,6 +127,8 @@ export interface SandboxShutdownLifecycle extends VmStartupReconciliationShutdow
   recordProviderStartup(generation: SandboxGeneration, lifetime: SandboxLifetime): Promise<void>;
   /** Blocks generic destructive lifecycle work while shutdown or capture ownership is unresolved. */
   isHolding(): boolean;
+  /** A failed/unknown record holds a source an ephemeral provider can only stop. */
+  needsEphemeralRelease?(): boolean;
   /** Tells a runtime refused at reconnect to retry while a capture needs its sandbox. */
   onRefusedReconnect(): "retry" | "exit";
   /** Owns termination; only unmanaged permits the legacy lifecycle fallback. */
@@ -2107,6 +2109,14 @@ export class SandboxLifecycleManager
         generation,
         error.providerObjectId
       );
+  }
+
+  /**
+   * Arm an immediate alarm when a stranded ephemeral source (left by the old
+   * save flow) is waiting to be stopped; the shutdown alarm then releases it.
+   */
+  async rearmEphemeralRelease(): Promise<void> {
+    if (this.shutdown.needsEphemeralRelease?.()) await this.alarmScheduler.schedule(Date.now());
   }
 
   rearmRejectedStartupCleanupAlarm(): Promise<void> {

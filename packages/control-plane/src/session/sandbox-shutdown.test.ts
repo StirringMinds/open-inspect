@@ -2110,10 +2110,12 @@ describe("ephemeral providers (Cloudflare Containers)", () => {
       error: "The provider did not confirm the save.",
     });
 
+    expect(f.shutdown.needsEphemeralRelease()).toBe(true);
     await f.shutdown.handleAlarm();
 
     expect(stopSandbox).toHaveBeenCalledWith(expect.objectContaining({ intent: "destroy" }));
     expect(f.store.value?.phase).toBe("running");
     expect(f.store.value?.sourceRetired).toBe(true);
+    expect(f.shutdown.needsEphemeralRelease()).toBe(false);
   });
 });
