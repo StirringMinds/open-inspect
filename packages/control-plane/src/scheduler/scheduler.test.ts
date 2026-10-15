@@ -1326,6 +1326,37 @@ describe("Scheduler", () => {
       expect(mockStore.incrementConsecutiveFailures).toHaveBeenCalledWith("auto-1");
     });
 
+    it("never counts a model rate-limit failure toward auto-pause", async () => {
+      mockStore.getOverdueAutomations.mockResolvedValue([sampleAutomation]);
+      selectRepositories("auto-1", [repositoryRow("auto-1")]);
+      mockCheckRepositoryAccess.mockResolvedValue(null);
+      mockStore.getInvocationRunAggregate.mockResolvedValue(
+        aggregate({ active: 0, failed: 1, completed: 0, rateLimitedFailed: 1 })
+      );
+
+      const scheduler = createScheduler();
+      await scheduler.tick();
+
+      expect(mockStore.tryMarkInvocationFailureCounted).not.toHaveBeenCalled();
+      expect(mockStore.incrementConsecutiveFailures).not.toHaveBeenCalled();
+      expect(mockStore.autoPause).not.toHaveBeenCalled();
+    });
+
+    it("still counts an invocation where a non-rate-limit failure sits beside a rate-limited one", async () => {
+      mockStore.getOverdueAutomations.mockResolvedValue([sampleAutomation]);
+      selectRepositories("auto-1", [repositoryRow("auto-1")]);
+      mockCheckRepositoryAccess.mockResolvedValue(null);
+      mockStore.getInvocationRunAggregate.mockResolvedValue(
+        aggregate({ active: 0, failed: 2, completed: 0, rateLimitedFailed: 1 })
+      );
+
+      const scheduler = createScheduler();
+      await scheduler.tick();
+
+      expect(mockStore.tryMarkInvocationFailureCounted).toHaveBeenCalledTimes(1);
+      expect(mockStore.incrementConsecutiveFailures).toHaveBeenCalledWith("auto-1");
+    });
+
     it("one inaccessible repository never blocks its siblings", async () => {
       mockStore.getOverdueAutomations.mockResolvedValue([sampleAutomation]);
       selectRepositories("auto-1", [

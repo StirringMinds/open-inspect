@@ -138,7 +138,8 @@ it("creates a canonical SHA-256 web prompt fingerprint", async () => {
 
 function buildQueue(
   mayDispatch: () => boolean = () => true,
-  getSandboxPromptBlockReason: () => string | null = () => null
+  getSandboxPromptBlockReason: () => string | null = () => null,
+  rateLimitRetries?: { get: (id: string) => { attempts: number; retryAt: number } | null }
 ) {
   // Mutable so tests can pin that the deadline honors the value current at
   // dispatch time — the thunk exists because settings can be persisted after
@@ -304,7 +305,8 @@ function buildQueue(
     executionStop,
     () => executionTimeoutMs,
     mayDispatch,
-    getSandboxPromptBlockReason
+    getSandboxPromptBlockReason,
+    rateLimitRetries
   );
 
   return {
@@ -1491,6 +1493,41 @@ describe("SessionMessageQueue", () => {
       type: "prompt_queue_updated",
       promptQueue: expect.any(Array),
     });
+  });
+
+  it("holds a rate-limited prompt until its backoff is due", async () => {
+    const h = buildQueue(undefined, undefined, {
+      get: () => ({ attempts: 1, retryAt: Date.now() + 30_000 }),
+    });
+    h.repository.getNextPendingMessage.mockReturnValue(createMessage({ id: "msg-rl" }));
+    h.wsManager.getSandboxSocket.mockReturnValue({ readyState: 1 } as WebSocket);
+
+    await h.queue.processMessageQueue();
+
+    expect(h.repository.startMessageProcessing).not.toHaveBeenCalled();
+    expect(h.wsManager.send).not.toHaveBeenCalled();
+  });
+
+  it("re-dispatches a rate-limited prompt once due, telling the agent to continue", async () => {
+    const h = buildQueue(undefined, undefined, {
+      get: () => ({ attempts: 1, retryAt: Date.now() - 1 }),
+    });
+    const sandboxWs = { readyState: 1 } as WebSocket;
+    h.repository.getNextPendingMessage.mockReturnValue(
+      createMessage({ id: "msg-rl", content: "Fix the bug" })
+    );
+    h.wsManager.getSandboxSocket.mockReturnValue(sandboxWs);
+
+    await h.queue.processMessageQueue();
+
+    expect(h.wsManager.send).toHaveBeenCalledWith(
+      sandboxWs,
+      expect.objectContaining({
+        type: "prompt",
+        messageId: "msg-rl",
+        content: expect.stringMatching(/rate-limited it\. Continue[\s\S]*Fix the bug$/),
+      })
+    );
   });
 
   it("tells the sandbox lifecycle a prompt was dispatched only once the send succeeds", async () => {

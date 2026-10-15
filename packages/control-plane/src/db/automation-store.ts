@@ -247,6 +247,8 @@ export interface InvocationRunAggregate {
   completed: number;
   skipped: number;
   lastCompletedAt: number | null;
+  /** Failed runs whose reason is a model rate limit (never an automation strike). */
+  rateLimitedFailed?: number;
 }
 
 // ─── Mappers ─────────────────────────────────────────────────────────────────
@@ -1435,6 +1437,13 @@ export class AutomationStore {
            COALESCE(SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END), 0) AS failed,
            COALESCE(SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END), 0) AS completed,
            COALESCE(SUM(CASE WHEN status = 'skipped' THEN 1 ELSE 0 END), 0) AS skipped,
+           COALESCE(SUM(CASE WHEN status = 'failed' AND (
+             failure_reason LIKE '%too many requests%'
+             OR failure_reason LIKE '%rate limit%'
+             OR failure_reason LIKE '%rate-limit%'
+             OR failure_reason LIKE '%"code":3021%'
+             OR failure_reason LIKE '%inference request per min%'
+           ) THEN 1 ELSE 0 END), 0) AS rate_limited_failed,
            MAX(completed_at) AS last_completed_at
          FROM automation_runs WHERE invocation_id = ?`
       )
@@ -1446,6 +1455,7 @@ export class AutomationStore {
         completed: number;
         skipped: number;
         last_completed_at: number | null;
+        rate_limited_failed?: number;
       }>();
 
     return {
@@ -1455,6 +1465,7 @@ export class AutomationStore {
       completed: row?.completed ?? 0,
       skipped: row?.skipped ?? 0,
       lastCompletedAt: row?.last_completed_at ?? null,
+      rateLimitedFailed: row?.rate_limited_failed ?? 0,
     };
   }
 

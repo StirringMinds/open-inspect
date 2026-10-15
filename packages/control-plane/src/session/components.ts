@@ -134,6 +134,7 @@ import { PullRequestHandler } from "./http/handlers/pull-request.handler";
 import { ParticipantsHandler } from "./http/handlers/participants.handler";
 import { MessageService } from "./services/message.service";
 import { createAlarmHandler } from "./alarm/handler";
+import { ModelRateLimitRetryStore } from "./model-rate-limit";
 import {
   createEarliestAlarmScheduler,
   handleAlarmDelivery,
@@ -265,6 +266,7 @@ export function createSessionRuntime(platform: SessionPlatform, env: Env): Sessi
   const artifactRepository = new ArtifactRepository(sql);
   const eventRepository = new EventRepository(sql, transaction);
   const usageRepository = new UsageRepository(sql, transaction);
+  const rateLimitRetries = new ModelRateLimitRetryStore(sql);
   const messageRepository = new MessageRepository(
     sql,
     transaction,
@@ -548,7 +550,8 @@ export function createSessionRuntime(platform: SessionPlatform, env: Env): Sessi
     executionStop,
     getExecutionTimeoutMs,
     () => lifecycleManager.mayProcessQueuedWork(),
-    () => sandboxPromptBlockReason(lifecycleManager.shutdownSnapshot())
+    () => sandboxPromptBlockReason(lifecycleManager.shutdownSnapshot()),
+    rateLimitRetries
   );
 
   // Tier 7 — services over the queue and lifecycle.
@@ -617,7 +620,9 @@ export function createSessionRuntime(platform: SessionPlatform, env: Env): Sessi
     transaction,
     (title) => {
       titleService.applySessionTitleUpdate(title, { onlyIfUnset: true });
-    }
+    },
+    rateLimitRetries,
+    (at) => alarmScheduler.schedule(at)
   );
   const runtimeEventHandler = new SandboxRuntimeEventHandler(
     sessionCoreRepository,
@@ -668,6 +673,10 @@ export function createSessionRuntime(platform: SessionPlatform, env: Env): Sessi
     log,
     preserveBeforeWatchdogs: (allowCaptureRetry) =>
       lifecycleManager.handleShutdownAlarm(allowCaptureRetry),
+    pumpRateLimitRetry: async () => {
+      const next = messageRepository.getNextPendingMessage();
+      if (next && rateLimitRetries.get(next.id)) await messageQueue.processMessageQueue();
+    },
   });
 
   const schedulePullRequestRefresh = (trigger: "open" | "manual"): void => {

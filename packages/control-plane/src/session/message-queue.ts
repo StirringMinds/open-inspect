@@ -46,6 +46,7 @@ import type { MessageFailureService } from "./message-failure-service";
 import { sandboxBootPhaseLogFields } from "../sandbox/boot-phase";
 import { resolveGitAuthorIdentity } from "./identity";
 import { validateReasoningEffort } from "./reasoning-effort";
+import { MODEL_RATE_LIMIT_RETRY_NOTE, type ModelRateLimitRetryStore } from "./model-rate-limit";
 import {
   parseStoredSessionAttachments,
   SessionAttachmentError,
@@ -172,7 +173,9 @@ export class SessionMessageQueue {
     /** Resolved per use so it honors settings persisted after construction. */
     private readonly getExecutionTimeoutMs: () => number,
     private readonly mayDispatch: () => boolean,
-    private readonly getSandboxPromptBlockReason: () => string | null
+    private readonly getSandboxPromptBlockReason: () => string | null,
+    /** Rate-limited turns waiting out a backoff (see model-rate-limit.ts). */
+    private readonly rateLimitRetries?: Pick<ModelRateLimitRetryStore, "get">
   ) {}
 
   async enqueueAutofix(
@@ -425,6 +428,17 @@ export class SessionMessageQueue {
     if (!message) {
       return;
     }
+    // A turn the model rate-limited waits out its backoff; the alarm re-pumps
+    // the queue when it is due.
+    const rateLimitRetry = this.rateLimitRetries?.get(message.id) ?? null;
+    if (rateLimitRetry && rateLimitRetry.retryAt > Date.now()) {
+      await this.alarmScheduler.schedule(rateLimitRetry.retryAt);
+      this.log.debug("processMessageQueue: waiting out a model rate-limit backoff", {
+        message_id: message.id,
+        retry_at: rateLimitRetry.retryAt,
+      });
+      return;
+    }
     const now = Date.now();
     const session = this.repository.getSession();
     const resolvedModel = getValidModelOrDefault(message.model || session?.model);
@@ -540,7 +554,7 @@ export class SessionMessageQueue {
     const command: SandboxCommand = {
       type: "prompt",
       messageId: message.id,
-      content: message.content,
+      content: rateLimitRetry ? MODEL_RATE_LIMIT_RETRY_NOTE + message.content : message.content,
       model: resolvedModel,
       reasoningEffort: resolvedEffort,
       author: {
