@@ -417,6 +417,17 @@ export class Scheduler {
     if (aggregate.total === 0) return; // childless skip — never counts
 
     if (aggregate.failed > 0) {
+      // A model rate limit (Workers AI 3021 / HTTP 429) is shared account
+      // capacity, not a broken automation: it never counts toward auto-pause.
+      if (aggregate.failed <= (aggregate.rateLimitedFailed ?? 0)) {
+        this.log.info("Automation failure not counted: model rate limit", {
+          event: "scheduler.failure_not_counted",
+          automation_id: automationId,
+          invocation_id: invocationId,
+          reason: "model_rate_limit",
+        });
+        return;
+      }
       const won = await store.tryMarkInvocationFailureCounted(invocationId);
       if (!won) return;
       await this.trackAutomationFailure(store, automationId);

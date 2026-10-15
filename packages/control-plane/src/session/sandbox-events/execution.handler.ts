@@ -8,6 +8,11 @@ import type { SessionStatusService } from "../session-status-service";
 import type { SandboxEventContext } from "./context";
 import type { SessionBudgetService } from "../budget-service";
 import { deriveFallbackSessionTitle } from "../title";
+import {
+  planModelRateLimitRetry,
+  type ModelRateLimitRetryState,
+  type ModelRateLimitRetryStore,
+} from "../model-rate-limit";
 
 /**
  * Execution-lifecycle family: settle a finished turn. `execution_complete`
@@ -42,8 +47,58 @@ export class SandboxExecutionEventHandler {
       "observeExecutionCost" | "deliverTransition"
     >,
     private readonly transaction: <T>(closure: () => T) => T,
-    private readonly offerFallbackTitle: (title: string) => void
+    private readonly offerFallbackTitle: (title: string) => void,
+    private readonly rateLimitRetries?: Pick<ModelRateLimitRetryStore, "get" | "record">,
+    private readonly scheduleAlarm?: (at: number) => Promise<void>,
+    private readonly random: () => number = Math.random
   ) {}
+
+  /**
+   * A turn the model provider rate-limited (Workers AI 3021 / HTTP 429) goes
+   * back to pending and is re-dispatched after a backoff instead of failing:
+   * no completion, no failure callback (so no automation strike), no status
+   * change.
+   */
+  private planRateLimitDeferral(
+    event: Extract<SandboxEvent, { type: "execution_complete" }>,
+    context: SandboxEventContext
+  ): ModelRateLimitRetryState | null {
+    if (event.success || !this.rateLimitRetries || !this.scheduleAlarm) return null;
+    if (context.processingMessage?.id !== event.messageId) return null;
+    const previous = this.rateLimitRetries.get(event.messageId)?.attempts ?? 0;
+    return planModelRateLimitRetry(event.error, previous, context.now, this.random);
+  }
+
+  private async deferRateLimitedTurn(
+    event: Extract<SandboxEvent, { type: "execution_complete" }>,
+    context: SandboxEventContext,
+    plan: ModelRateLimitRetryState
+  ): Promise<void> {
+    const store = this.rateLimitRetries;
+    const scheduleAlarm = this.scheduleAlarm;
+    if (!store || !scheduleAlarm) return;
+    const budgetTransition = this.transaction(() => {
+      this.messageRepository.updateMessageToPending(event.messageId);
+      store.record(event.messageId, plan.attempts, plan.retryAt);
+      return this.budget.observeExecutionCost(event, context.now);
+    });
+    await this.budget.deliverTransition(budgetTransition);
+    const delayMs = plan.retryAt - context.now;
+    this.log.warn("Model rate-limited the turn; retrying after backoff", {
+      event: "prompt.rate_limit_retry",
+      message_id: event.messageId,
+      attempt: plan.attempts,
+      delay_ms: delayMs,
+    });
+    this.messenger.broadcast({
+      type: "sandbox_warning",
+      message: `The AI model is rate-limited; retrying in ${Math.round(delayMs / 1000)}s (attempt ${plan.attempts}).`,
+    });
+    this.messenger.broadcast({ type: "processing_status", isProcessing: false });
+    this.broadcastPromptQueue();
+    this.updateLastActivity(context.now);
+    await scheduleAlarm(plan.retryAt);
+  }
 
   /**
    * A harness that never suggests a title (the Claude harness emits no
@@ -62,6 +117,13 @@ export class SandboxExecutionEventHandler {
     event: Extract<SandboxEvent, { type: "execution_complete" }>,
     context: SandboxEventContext
   ): Promise<void> {
+    // Checked synchronously: a turn that is not deferred must reach its
+    // completion commit in the same tick, as before.
+    const rateLimitRetry = this.planRateLimitDeferral(event, context);
+    if (rateLimitRetry) {
+      await this.deferRateLimitedTurn(event, context, rateLimitRetry);
+      return;
+    }
     // Release the processing/stop fence and settle final cost in one commit.
     // No queue invocation may see a finished turn with its budget still stale.
     const { completion, budgetTransition } = this.transaction(() => {

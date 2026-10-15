@@ -23,6 +23,8 @@ export interface AlarmHandlerDeps {
   now: () => number;
   /** Session-scoped logger — alarms run outside any request, so there is no request correlation. */
   log: Logger;
+  /** Re-dispatch a model-rate-limited turn whose backoff is due (model-rate-limit.ts). */
+  pumpRateLimitRetry?: () => Promise<void>;
 }
 
 export interface AlarmHandler {
@@ -101,6 +103,7 @@ export function createAlarmHandler(deps: AlarmHandlerDeps): AlarmHandler {
         // sees, and nothing re-drives it onto a fresh sandbox.
         await deps.messageQueue.failPendingMessage(bootPrompt.id, lifecycleResult.reason);
       }
+      await deps.pumpRateLimitRetry?.();
       if (projectionFailure) throw projectionFailure.error;
     },
   };
