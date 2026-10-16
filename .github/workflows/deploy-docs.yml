@@ -20,8 +20,9 @@ env:
 
 jobs:
   deploy:
+    if: false  # disabled Oct 16 2026: deploys the docs site; no GitHub-hosted minutes per Pranav
     name: Deploy docs to Vercel
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, cf-ephemeral]
     timeout-minutes: 10
     steps:
       # A maintainer asked for a deployment, so a run that cannot publish has to

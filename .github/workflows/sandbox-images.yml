@@ -17,7 +17,7 @@ permissions:
 
 jobs:
   contract:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, cf-ephemeral]
     timeout-minutes: 30
     strategy:
       fail-fast: false
@@ -42,6 +42,7 @@ jobs:
           python3 packages/sandbox-images/cli.py lock --check
           uv run --frozen --project packages/sandbox-images --extra dev pytest packages/sandbox-images/tests
       - name: Build and verify the reference image on native amd64
+        if: false  # disabled Oct 16 2026: docker build/run of the reference image; our CF runners have no Docker. The lock check and pytest above still run
         run: |
           bundle=$(python3 packages/sandbox-images/cli.py pack --provider ${{ matrix.provider }})
           docker build --platform linux/amd64 --build-arg BASE_IMAGE=${{ matrix.base }} -f packages/sandbox-images/Dockerfile -t openinspect-image-contract "$bundle"

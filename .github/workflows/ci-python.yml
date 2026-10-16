@@ -50,7 +50,7 @@ concurrency:
 jobs:
   lint-python-sandbox-runtime:
     name: Lint & Format (Python - sandbox-runtime)
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, cf-ephemeral]
     timeout-minutes: 5
     defaults:
       run:
@@ -80,7 +80,7 @@ jobs:
 
   lint-python:
     name: Lint & Format (Python - provider infra)
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, cf-ephemeral]
     timeout-minutes: 5
     steps:
       - name: Checkout
@@ -108,7 +108,7 @@ jobs:
 
   typecheck-python:
     name: TypeCheck (Python)
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, cf-ephemeral]
     timeout-minutes: 5
     defaults:
       run:
@@ -137,7 +137,7 @@ jobs:
 
   typecheck-python-sandbox-runtime:
     name: TypeCheck (Python - sandbox-runtime)
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, cf-ephemeral]
     timeout-minutes: 5
     needs: [lint-python-sandbox-runtime]
     defaults:
@@ -166,7 +166,7 @@ jobs:
 
   test-python-sandbox-runtime:
     name: Test (Python - sandbox-runtime)
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, cf-ephemeral]
     timeout-minutes: 5
     needs: [lint-python-sandbox-runtime]
     defaults:
@@ -203,7 +203,7 @@ jobs:
 
   test-python:
     name: Test (Python - modal-infra)
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, cf-ephemeral]
     timeout-minutes: 5
     needs: [lint-python]
     defaults:
