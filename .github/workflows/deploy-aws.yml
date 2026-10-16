@@ -66,14 +66,15 @@ jobs:
   # before it is used: `deploy` puts it in `environment:`, which is evaluated as
   # the job starts and has no step to run first.
   target:
+    if: false  # disabled Oct 16 2026: deploy workflow (AWS); never triggered from here; no GitHub-hosted minutes per Pranav
     name: Pick the target
     # An installation that has configured no AWS environment skips the whole
     # workflow rather than spending a runner to discover it has nothing to do.
     # `vars` is readable here, which is the only reason this can be decided
     # before a job starts -- `on:` has no access to it, so the alternative is a
     # job that runs on every push to say it has nothing to deploy.
-    if: inputs.environment != '' || vars.AWS_DEPLOY_ON_PUSH_ENVIRONMENT != ''
-    runs-on: ubuntu-latest
+    # was: if: inputs.environment != '' || vars.AWS_DEPLOY_ON_PUSH_ENVIRONMENT != ''
+    runs-on: [self-hosted, cf-ephemeral]
     permissions: {}
     timeout-minutes: 2
     outputs:
@@ -106,9 +107,10 @@ jobs:
           echo "deploying to $environment"
 
   deploy:
+    if: false  # disabled Oct 16 2026: deploys to AWS with an arm64 Docker image build + ECR push; no GitHub-hosted minutes per Pranav
     name: Deploy
     needs: [target]
-    if: needs.target.outputs.environment != ''
+    # was: if: needs.target.outputs.environment != ''
     # Native arm64: the instance is Graviton and the image has no amd64 build,
     # so an x86 runner would mean QEMU and a build several times longer.
     runs-on: ubuntu-24.04-arm

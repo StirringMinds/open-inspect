@@ -25,8 +25,9 @@ concurrency:
 
 jobs:
   compose-smoke:
+    if: false  # disabled Oct 16 2026: boots the control-plane image with Docker Compose; our CF runners have no Docker; no GitHub-hosted minutes per Pranav
     name: Compose smoke (container)
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, cf-ephemeral]
     # The stack boots and the session round-trips in about a minute; the rest
     # of the budget is the image build on a cold layer cache.
     timeout-minutes: 15
@@ -135,6 +136,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v7
         with:
+          retention-days: 3  # Pranav: storage must not grow
           name: compose-smoke-logs
           path: smoke-logs/
           if-no-files-found: ignore

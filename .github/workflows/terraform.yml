@@ -57,7 +57,7 @@ env:
 jobs:
   check-secrets:
     name: Check Secrets
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, cf-ephemeral]
     timeout-minutes: 2
     outputs:
       has-secrets: ${{ steps.check.outputs.has-secrets }}
@@ -85,7 +85,7 @@ jobs:
 
   validate:
     name: Validate
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, cf-ephemeral]
     timeout-minutes: 5
     needs: [check-secrets]
     outputs:
@@ -135,7 +135,7 @@ jobs:
 
   plan:
     name: Plan
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, cf-ephemeral]
     timeout-minutes: 15
     needs: [validate, check-secrets]
     if: github.event_name == 'pull_request' && needs.check-secrets.outputs.has-secrets == 'true'
@@ -322,7 +322,7 @@ jobs:
 
   comment:
     name: Comment
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, cf-ephemeral]
     timeout-minutes: 5
     needs: [validate, check-secrets, plan]
     if: always() && !cancelled() && github.event_name == 'pull_request'
@@ -422,11 +422,12 @@ jobs:
             }
 
   apply:
+    if: false  # disabled Oct 16 2026: terraform apply deploys infrastructure; no GitHub-hosted minutes per Pranav
     name: Apply
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, cf-ephemeral]
     timeout-minutes: 45
     needs: [validate, check-secrets]
-    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main' && needs.check-secrets.outputs.has-secrets == 'true'
+    # was: if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main' && needs.check-secrets.outputs.has-secrets == 'true'
     environment: production
     steps:
       - name: Checkout

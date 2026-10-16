@@ -19,7 +19,7 @@ concurrency:
 jobs:
   changes:
     name: Detect coverage inputs
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, cf-ephemeral]
     timeout-minutes: 5
     outputs:
       control-plane: ${{ steps.changes.outputs.control-plane }}
@@ -102,7 +102,7 @@ jobs:
     name: Coverage (control-plane ${{ matrix.shard }})
     needs: changes
     if: needs.changes.outputs.control-plane == 'true'
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, cf-ephemeral]
     timeout-minutes: 10
     strategy:
       fail-fast: false
@@ -133,6 +133,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
+          retention-days: 3  # Pranav: storage must not grow
           name: control-plane-coverage-shard-${{ strategy.job-index }}
           path: packages/control-plane/.vitest-reports/
           include-hidden-files: true
@@ -141,7 +142,7 @@ jobs:
   control-plane-coverage:
     name: Coverage (control-plane)
     needs: control-plane-coverage-shard
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, cf-ephemeral]
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
@@ -167,6 +168,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
+          retention-days: 3  # Pranav: storage must not grow
           name: coverage-data-control-plane
           path: packages/control-plane/coverage/
           if-no-files-found: error
@@ -175,7 +177,7 @@ jobs:
     name: Coverage (web)
     needs: changes
     if: needs.changes.outputs.web == 'true'
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, cf-ephemeral]
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
@@ -197,6 +199,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
+          retention-days: 3  # Pranav: storage must not grow
           name: coverage-data-web
           path: packages/web/coverage/
           if-no-files-found: error
@@ -205,7 +208,7 @@ jobs:
     name: Coverage (shared and bots)
     needs: changes
     if: needs.changes.outputs.other-ts == 'true'
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, cf-ephemeral]
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
@@ -231,6 +234,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
+          retention-days: 3  # Pranav: storage must not grow
           name: coverage-data-ts
           path: |
             packages/shared/coverage/
@@ -243,7 +247,7 @@ jobs:
     name: Coverage (Python)
     needs: changes
     if: needs.changes.outputs.python == 'true'
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, cf-ephemeral]
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
@@ -269,6 +273,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
+          retention-days: 3  # Pranav: storage must not grow
           name: coverage-data-python
           path: |
             packages/modal-infra/coverage/
@@ -287,7 +292,7 @@ jobs:
         other-ts-coverage,
         python-coverage,
       ]
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, cf-ephemeral]
     timeout-minutes: 10
     steps:
       - name: Require successful coverage jobs
@@ -344,6 +349,7 @@ jobs:
         if: always() && contains(needs.changes.outputs.*, 'true')
         uses: actions/upload-artifact@v7
         with:
+          retention-days: 3  # Pranav: storage must not grow
           name: production-coverage
           path: packages/*/coverage/
           if-no-files-found: error
